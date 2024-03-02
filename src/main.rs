@@ -21,7 +21,7 @@ impl Vector {
     // Check if correct
     fn cross(&self, b: &Vector) -> Vector {
         return Vector {
-            x: self.y * b.z - self.z,
+            x: self.y * b.z - self.z * b.y,
             y: -1.0 * (self.x * b.z - self.z * b.x),
             z: self.x * b.y - self.y * b.x,
         };
