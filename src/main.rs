@@ -26,7 +26,30 @@ impl Vector {
             z: self.x * b.y - self.y * b.x,
         };
     }
+    fn add(&self, b: &Vector) -> Vector {
+        return Vector {
+            x: self.x + b.x,
+            y: self.y + b.y,
+            z: self.z + b.z
+        }
+    }
 
+    fn minus(&self, b: &Vector) -> Vector {
+        return Vector {
+            x: self.x - b.x,
+            y: self.y - b.y,
+            z: self.z - b.z
+        }
+    }
+
+}
+
+
+struct Sphere {
+    x: f64,
+    y: f64,
+    z: f64,
+    radius: f64
 }
 
 fn main() {
@@ -38,6 +61,8 @@ fn main() {
     write_ppm_file(WIDTH, HEIGHT, &end_image).expect("Fail");
 }
 
+
+
 fn write_ppm_file(width: usize, height: usize, image: &[f64]) -> Result<(), io::Error> {
     let mut file = File::create("result.ppm")?;
 
@@ -48,6 +73,5 @@ fn write_ppm_file(width: usize, height: usize, image: &[f64]) -> Result<(), io::
         write!(file, "{} ", (e * 255.0).round())?;
     }
     write!(file, "\n")?;
-//    file.write(b"255 0 0 0 255 0\n")?;
     Ok(())
 }
