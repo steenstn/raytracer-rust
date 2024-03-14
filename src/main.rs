@@ -1,56 +1,11 @@
-use std::fs::File;
-use std::io;
+#[macro_use]
+extern crate bmp;
+
+mod vector;
+
+use crate::vector::Vector;
 use std::io::Write;
-
-#[derive(Debug)]
-struct Vector {
-    x: f64,
-    y: f64,
-    z: f64,
-}
-
-impl Vector {
-    fn dot(&self, b: &Vector) -> f64 {
-        self.x * b.x + self.y * b.y + self.z * b.z
-    }
-
-    fn length(&self) -> f64 {
-        return f64::sqrt(self.x * self.x + self.y * self.y + self.z * self.z);
-    }
-
-    // Check if correct
-    fn cross(&self, b: &Vector) -> Vector {
-        return Vector {
-            x: self.y * b.z - self.z * b.y,
-            y: -1.0 * (self.x * b.z - self.z * b.x),
-            z: self.x * b.y - self.y * b.x,
-        };
-    }
-    fn add(&self, b: &Vector) -> Vector {
-        return Vector {
-            x: self.x + b.x,
-            y: self.y + b.y,
-            z: self.z + b.z,
-        };
-    }
-
-    fn minus(&self, b: &Vector) -> Vector {
-        return Vector {
-            x: self.x - b.x,
-            y: self.y - b.y,
-            z: self.z - b.z,
-        };
-    }
-
-    fn multiply(&self, value: f64) -> Vector {
-        return Vector {
-            x: self.x * value,
-            y: self.y * value,
-            z: self.z * value,
-        };
-    }
-}
-
+use bmp::{Image, Pixel};
 
 struct Sphere {
     x: f64,
@@ -59,30 +14,71 @@ struct Sphere {
     radius: f64,
 }
 
-fn main() {
-    const WIDTH: usize = 10;
-    const HEIGHT: usize = 10;
 
-    let mut end_image = [0.5; WIDTH * HEIGHT * 3];
+fn clamp(value: f64, min: f64, max: f64) -> f64 {
+    if value > max {
+        max
+    } else if value < min {
+        min
+    } else {
+        value
+    }
+}
+
+fn main() {
+    const WIDTH: usize = 640;
+    const HEIGHT: usize = 400;
 
     let s = Sphere {
         x: 0.0,
         y: 0.0,
-        z: 10.0,
+        z: 20.0,
         radius: 3.0,
     };
 
-    let res = ray_sphere_intersection(&Vector { x: 0.0, y: 0.0, z: 0.0 }, &Vector {
+    let width = WIDTH as f64;
+    let height = HEIGHT as f64;
+    let camera_position = Vector {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+    };
+    let camera_direction = Vector {
         x: 0.0,
         y: 0.0,
         z: 1.0,
-    }, &s);
+    };
 
-    match res {
-        None => { println!("MISS") }
-        Some(vector) => { println!("Hit at {:?}", vector) }
+    // let mut screen = [[[0.0; WIDTH]; HEIGHT]; 3]; // X*Y*3
+
+    let mut image = Image::new(WIDTH as u32, HEIGHT as u32);
+    //    println!("woo {}", screen[3][0][0]);
+    for x in 0..WIDTH {
+        for y in 0..HEIGHT {
+            let x_direction = (x as f64 * 6.0) / width - 3.0;
+            let y_direction = (y as f64 * 6.0) * height / width / height - 3.0 * height / width;
+
+            let direction = Vector {
+                x: x_direction / 6.0,
+                y: y_direction / 6.0,
+                z: 1.0,
+            }
+                .normalize();
+            let res = ray_sphere_intersection(&camera_position, &direction, &s);
+
+            match res {
+                None => {
+                    image.set_pixel(x as u32, y as u32, px!(0,0,0))
+                }
+                Some(_) => {
+                    image.set_pixel(x as u32, y as u32, px!(255,255,255));
+                }
+            }
+        }
     }
-    write_ppm_file(WIDTH, HEIGHT, &end_image).expect("Fail");
+
+
+    let _ = image.save("result.bmp");
 }
 
 fn ray_sphere_intersection(start: &Vector, direction: &Vector, sphere: &Sphere) -> Option<Vector> {
@@ -94,7 +90,8 @@ fn ray_sphere_intersection(start: &Vector, direction: &Vector, sphere: &Sphere) 
 
     let v = start.minus(&center);
 
-    let wee = (v.dot(direction)) * (v.dot(direction)) - (v.x * v.x + v.y * v.y + v.z * v.z - sphere.radius * sphere.radius);
+    let wee = (v.dot(direction)) * (v.dot(direction))
+        - (v.x * v.x + v.y * v.y + v.z * v.z - sphere.radius * sphere.radius);
 
     if wee <= 0.0 {
         return None;
@@ -103,17 +100,17 @@ fn ray_sphere_intersection(start: &Vector, direction: &Vector, sphere: &Sphere) 
     let intersection1 = v.dot(direction) * -1.0 + f64::sqrt(wee);
     let intersection2 = v.dot(direction) * -1.0 - f64::sqrt(wee);
 
-
-    // Check or fix
     let closest_intersection = if intersection1 < intersection2 && intersection1 > 0.0001 {
         intersection1
-    } else if intersection2 < intersection1 && intersection2 > 0.0001 { intersection2 } else {
+    } else if intersection2 < intersection1 && intersection2 > 0.0001 {
+        intersection2
+    } else {
         return None;
     };
 
     let end_distance = direction.multiply(closest_intersection);
     let end_position = start.add(&end_distance);
-    return Some(end_position);
+    Some(end_position)
 }
 
 /*
@@ -140,15 +137,3 @@ override fun getIntersection(start: Vector, direction: Vector): SurfacePoint? {
 
 
  */
-fn write_ppm_file(width: usize, height: usize, image: &[f64]) -> Result<(), io::Error> {
-    let mut file = File::create("result.ppm")?;
-
-    file.write(b"P3\n")?;
-    write!(file, "{} {}\n", width, height)?;
-    file.write(b"255\n")?;
-    for e in image {
-        write!(file, "{} ", (e * 255.0).round())?;
-    }
-    write!(file, "\n")?;
-    Ok(())
-}
