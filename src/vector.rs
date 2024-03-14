@@ -1,3 +1,5 @@
+use rand::random;
+
 #[derive(Debug)]
 pub struct Vector {
     pub x: f64,
@@ -50,4 +52,8 @@ impl Vector {
             z: self.z * value,
         };
     }
+}
+
+pub(crate) fn random_vector() -> Vector {
+    Vector { x: random::<f64>(), y: random::<f64>(), z: random::<f64>() }.normalize()
 }
