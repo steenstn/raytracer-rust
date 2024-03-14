@@ -82,6 +82,9 @@ fn main() {
 
     let mut image = Image::new(WIDTH as u32, HEIGHT as u32);
     for x in 0..WIDTH {
+        if (x % 10 == 0) {
+            println!("{x}/{WIDTH}");
+        }
         for y in 0..HEIGHT {
             let x_direction = (x as f64 * 6.0) / width - 3.0;
             let y_direction = (y as f64 * 6.0) / width - 3.0 * height / width;
@@ -104,7 +107,11 @@ fn main() {
             res.1 /= NUM_RAYS as f64;
             res.2 /= NUM_RAYS as f64;
 
-            image.set_pixel(x as u32, y as u32, px!(res.0*255.0,res.1*255.0,res.2*255.0))
+            let end_r = clamp(res.0, 0.0, 255.0);
+            let end_g = clamp(res.1, 0.0, 255.0);
+            let end_b = clamp(res.2, 0.0, 255.0);
+
+            image.set_pixel(x as u32, y as u32, px!(end_r*255.0,end_g*255.0,end_b*255.0))
         }
     }
 
