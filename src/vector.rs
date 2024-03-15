@@ -89,6 +89,14 @@ impl Vector {
             z: self.z * value,
         };
     }
+
+    pub fn divide(&self, value: f64) -> Vector {
+        return Vector {
+            x: self.x / value,
+            y: self.y / value,
+            z: self.z / value,
+        };
+    }
 }
 
 pub(crate) fn random_vector() -> Vector {

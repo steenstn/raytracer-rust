@@ -6,6 +6,7 @@ mod vector;
 use crate::vector::Vector;
 use std::io::Write;
 use bmp::{Image, Pixel};
+use multiarray::*;
 
 struct Sphere {
     x: f64,
@@ -14,6 +15,13 @@ struct Sphere {
     radius: f64,
     color: Color,
     light: bool,
+}
+
+struct Plane {
+    x: f64,
+    y: f64,
+    z: f64,
+    normal: Vector,
 }
 
 
@@ -36,11 +44,11 @@ fn clamp(value: f64, min: f64, max: f64) -> f64 {
 }
 
 const MAX_BOUNCES: u32 = 20;
-const NUM_RAYS: u32 = 200;
+const NUM_RAYS: u32 = 50;
 
 fn main() {
-    const WIDTH: usize = 640;
-    const HEIGHT: usize = 400;
+    const WIDTH: usize = 400;
+    const HEIGHT: usize = 300;
 
     let spheres = [Sphere {
         x: -5.0,
@@ -64,7 +72,18 @@ fn main() {
             radius: 2.0,
             color: Color(0.1, 0.4, 0.65),
             light: false,
-        }];
+        },
+    ];
+    let p = Plane {
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        normal: Vector {
+            x: 0.0,
+            y: 1.0,
+            z: 0.0,
+        },
+    };
 
     let width = WIDTH as f64;
     let height = HEIGHT as f64;
@@ -79,44 +98,51 @@ fn main() {
         z: 1.0,
     };
 
-
-    let mut image = Image::new(WIDTH as u32, HEIGHT as u32);
-    for x in 0..WIDTH {
-        if (x % 10 == 0) {
-            println!("{x}/{WIDTH}");
-        }
-        for y in 0..HEIGHT {
-            let x_direction = (x as f64 * 6.0) / width - 3.0;
-            let y_direction = (y as f64 * 6.0) / width - 3.0 * height / width;
-
-            let direction = Vector {
-                x: x_direction / 6.0,
-                y: y_direction / 6.0,
-                z: 1.0,
-            }.normalize();
-            let mut res = Color(0.0, 0.0, 0.0);
-
-            for i in 0..NUM_RAYS {
-                let new_color = shoot_ray(&camera_position, &direction, &spheres, 0);
-                res.0 += new_color.0;
-                res.1 += new_color.1;
-                res.2 += new_color.2;
+    let mut image = Array3D::new([WIDTH, HEIGHT, 3], 0.0);
+    let mut bmp_image = Image::new(WIDTH as u32, HEIGHT as u32);
+    let mut num_passes: u32 = 1;
+    loop {
+        for x in 0..WIDTH {
+            if (x % 10 == 0) {
+                println!("{x}/{WIDTH}");
             }
+            for y in 0..HEIGHT {
+                let x_direction = (x as f64 * 6.0) / width - 3.0;
+                let y_direction = (y as f64 * 6.0) / width - 3.0 * height / width;
 
-            res.0 /= NUM_RAYS as f64;
-            res.1 /= NUM_RAYS as f64;
-            res.2 /= NUM_RAYS as f64;
+                let direction = Vector {
+                    x: x_direction / 6.0,
+                    y: y_direction / 6.0,
+                    z: 1.0,
+                }.normalize();
+                let mut res = Color(0.0, 0.0, 0.0);
 
-            let end_r = clamp(res.0, 0.0, 255.0);
-            let end_g = clamp(res.1, 0.0, 255.0);
-            let end_b = clamp(res.2, 0.0, 255.0);
+                for i in 0..NUM_RAYS {
+                    let new_color = shoot_ray(&camera_position, &direction, &spheres, 0);
+                    res.0 += new_color.0;
+                    res.1 += new_color.1;
+                    res.2 += new_color.2;
+                }
 
-            image.set_pixel(x as u32, y as u32, px!(end_r*255.0,end_g*255.0,end_b*255.0))
+                res.0 /= NUM_RAYS as f64;
+                res.1 /= NUM_RAYS as f64;
+                res.2 /= NUM_RAYS as f64;
+
+                image[[x, y, 0]] += res.0 ;
+                image[[x, y, 1]] += res.1 ;
+                image[[x, y, 2]] += res.2 ;
+
+                bmp_image.set_pixel(x as u32, y as u32,
+                                    px!(clamp(image[[x, y, 0]]/ num_passes as f64 * 255.0, 0.0, 255.0),
+                    clamp(image[[x, y, 1]]/ num_passes as f64 * 255.0, 0.0, 255.0),
+                    clamp(image[[x, y, 2]]/ num_passes as f64 * 255.0, 0.0,255.0)))
+            }
         }
+
+
+        num_passes += 1;
+        let _ = bmp_image.save("result.bmp");
     }
-
-
-    let _ = image.save("result.bmp");
 }
 
 fn shoot_ray(start: &Vector, direction: &Vector, spheres: &[Sphere], num_bounces: u32) -> Color {
@@ -145,7 +171,7 @@ fn shoot_ray(start: &Vector, direction: &Vector, spheres: &[Sphere], num_bounces
             Color(0.0, 0.0, 0.0)
         }
         Some(sp) => {
-            if (hit_sphere.unwrap().light == true) {
+            if hit_sphere.unwrap().light == true {
                 return Color(hit_sphere.unwrap().color.0, hit_sphere.unwrap().color.1, hit_sphere.unwrap().color.2);
             }
             let random_vector = vector::random_vector();
@@ -165,6 +191,28 @@ fn shoot_ray(start: &Vector, direction: &Vector, spheres: &[Sphere], num_bounces
             Color(sp.color.0 * reflected.0, sp.color.1 * reflected.1, sp.color.2 * reflected.2)
         }
     };
+}
+
+
+fn ray_plane_intersection(start: &Vector, direction: &Vector, plane: &Plane) -> Option<SurfacePoint> {
+    let plane_position = Vector { x: plane.x, y: plane.y, z: plane.z };
+    let distance = plane_position.minus(start).dot(&plane.normal) / (direction.dot(&plane.normal));
+    if distance > 0.00001 {
+        let end_movement = direction * distance;
+        let intersection_point = start.add(&end_movement);
+        return Some(SurfacePoint { position: intersection_point, normal: Vector { x: plane.normal.x, y: plane.normal.y, z: plane.normal.z }, color: Color(0.7, 0.7, 0.7) });
+    }
+    return None;
+    /*
+          val distance = (position-start).dot(normal)/direction.dot(normal)
+        if(distance > 0.00001) {
+            val endMovement = direction * distance
+            val intersectionPoint = start + endMovement
+            return SurfacePoint(intersectionPoint, normal, material)
+        }
+        return null
+    }
+     */
 }
 
 fn ray_sphere_intersection(start: &Vector, direction: &Vector, sphere: &Sphere) -> Option<SurfacePoint> {
